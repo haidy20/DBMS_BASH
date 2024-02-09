@@ -1,0 +1,2 @@
+integer:string:integer
+id:name:age
