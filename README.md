@@ -1,6 +1,6 @@
-Database Management System Bash Shell Script Project
-The Main menu displayed for the user with following options:
+                                                                              Database Management System Bash Shell Script Project
 
+The Main menu displayed for the user with following options:
 1 Create Database
 2 List Databases
 3 Connect To Databases
