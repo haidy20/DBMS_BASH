@@ -335,7 +335,7 @@ function updateTable {
     #     echo "Table '$tableName' doesn't exist."
     #     return
     # fi
-    
+
     if ! grep -q ":" "$PWD/${tableName}.txt"; then
         echo "There is no data to update in table '$tableName'."
         return
@@ -370,7 +370,7 @@ function selectById(){
     local pk
 
     if [ -z "$(ls)" ]; then
-        echo "No Tables To Remove"
+        echo "No Tables To Select"
         return
     fi
 
