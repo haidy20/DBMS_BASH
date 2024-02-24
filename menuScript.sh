@@ -20,13 +20,13 @@ validateByName() {
 #----------------------------Function to validate column datatype-----------------------------
 #$1 -> Value
 #$2 -> datatype
-function validateDataType { 
+function validateDataType {
     if [ -z "$1" ]
     then
         return 1
     fi
 
-    if [[ "$1" =~ ^[1-9]+$ ]]
+    if [[ "$1" =~ ^[1-9][0-9]*$ ]]
     then
         if [ "$2" == "integer" ]
         then
@@ -107,14 +107,14 @@ function createTable {
     read -p "Enter the table you want to create: " tableName
 
     validateByName "$tableName" || return 
-    if [ -d "$tableName" ]; then
-        echo "Table already exists."
-        return
-    fi
- 
+
+    if [ -f "$PWD/${tableName}-meta.txt" ] && [ -f "$PWD/${tableName}.txt" ]; then
+    echo "Table $tableName already exists."
+    return
+fi
     touch "$PWD/${tableName}.txt" || { echo "Error: Failed to create data file."; return; }
     touch "$PWD/${tableName}-meta.txt" || { echo "Error: Failed to create meta file."; return; }
-    
+
     while true; do
         read -p "Enter Number Of Columns: " cols
         if [[ ! $cols =~ ^[1-9][0-9]*$ ]]; then
@@ -122,7 +122,7 @@ function createTable {
         else
             break
         fi
-    done 
+    done
 
     while [ $num -lt $cols ]; do
         if [ $num -eq 0 ]; then
@@ -208,11 +208,12 @@ function insertTable {
     read -r -p "Enter the name of the table: " tableName
     validateByName "$tableName" || return
 
-    # if [  -f "$tableName".txt ];then
-    # echo "Table '$tableName '.txt doesn't exist."
-    # return
-    # fi
-
+  # \\\\\\\\\\\\\\\\\\\\\\\
+    if [ ! -f "$PWD/${tableName}-meta.txt" ]; then
+        echo "No Table with this name"
+        return
+    fi
+  # ////////////////////////
     file="$PWD/${tableName}-meta.txt"
 
     IFS=$'\n' read -d '' -r -a lines < "$file"
@@ -227,11 +228,11 @@ function insertTable {
 
         if ! validateDataType "$colValue" "$colType"; then
             echo "Invalid data type for $colName: $colValue"
-            exit
+            return
         fi
         if [ $i -eq 0 ] && grep -q "^${colValue}:" "$PWD/${tableName}.txt"; then
             echo "This PK already exists. Please try again."
-            exit
+            return
         fi
 
         insertValue+="${colValue}:"
@@ -259,13 +260,12 @@ function deleteTable {
         fi
     done
 
-    if [ -d "$tableName" ]; then
-        echo "Table Doesn't Exist"
+
+    if [ ! -f "$PWD/${tableName}-meta.txt" ]; then
+        echo "No Table with this name"
         return
     fi
-
-
-    if [ -s "$tableName/${tableName}.txt" ]; then
+   if [ ! -s "$PWD/${tableName}.txt" ]; then
         echo "The $tableName is empty."
         return
     fi
@@ -273,9 +273,8 @@ function deleteTable {
     read -p "Do you want to delete the whole table? [y/n]: " choice
     case $choice in
         [Yy]* )
-            rm "$PWD/${tableName}.txt"
-            rm "$PWD/${tableName}-meta.txt"
-            echo "Table ${tableName} deleted successfully"
+            echo -n > "$PWD/${tableName}.txt"
+            echo "All rows in Table ${tableName} deleted successfully"
             return
             ;;
         [Nn]* )
@@ -306,22 +305,23 @@ function selectAllTable {
     read -r -p "Enter the name of the table: " tableName
     validateByName "$tableName" || return
 
-    if [ -d "$tableName" ]; then
-        echo "Table Doesn't Exist"
+
+if [ ! -f "$PWD/${tableName}-meta.txt" ]; then
+        echo "No Table with this name"
         return
     fi
 
-    if [ -s "${tableName}" ]; then
+    if [ ! -s "$PWD/${tableName}.txt" ]; then
         echo "The $tableName is empty."
         return
     fi
-
-    tail -1 "$PWD/${tableName}-meta.txt" 
     echo "Here Is Select all The Table"
+    tail -1 "$PWD/${tableName}-meta.txt"  
     awk -F ':' '{print $0 }' "$PWD/${tableName}.txt"
     
 }
 #---------------------------Function update table------------------------------------------
+
 function updateTable {
 
  if [ -z "$(ls)" ]; then 
@@ -331,10 +331,10 @@ function updateTable {
     read -r -p "Enter Table Name: " tableName
     validateByName "$tableName" || return
 
-    # if [ -d "$PWD/${tableName}" ]; then
-    #     echo "Table '$tableName' doesn't exist."
-    #     return
-    # fi
+  if [ ! -f "$PWD/${tableName}-meta.txt" ]; then
+        echo "No Table with this name"
+        return
+    fi
 
     if ! grep -q ":" "$PWD/${tableName}.txt"; then
         echo "There is no data to update in table '$tableName'."
@@ -348,22 +348,33 @@ function updateTable {
         return
     fi
 
-    read -r -p "Enter Previous Name: " colName
+    file="$PWD/${tableName}-meta.txt"
 
-    if ! grep -q "$colName" "$PWD/${tableName}.txt"; then
-        echo "The column '$colName' doesn't exist."
-        return
-    fi
+    IFS=$'\n' read -d '' -r -a lines < "$file"
+    IFS=: read -ra colTypes <<< "${lines[0]}"
+    IFS=: read -ra colNames <<< "${lines[1]}"
+    # Validate that the length of colTypes == colNames ==> invalid meta data
 
-    read -r -p "Enter New Value: " newValue
-    colType=$(grep "$colName" "$PWD/${tableName}-meta.txt" | cut -d ':' -f2)
+    updateValue="${pk}"
+    for ((i=1; i<${#colNames[@]}; i++)); do
+        read -r -p "Enter the new value of ${colNames[i]} of type ${colTypes[i]}: " colValue
+        colName="${colNames[i]}"
+        colType="${colTypes[i]}"
 
-    validateDataType "$newValue" "$colType"
+        if ! validateDataType "$colValue" "$colType"; then
+            echo "Invalid data type for $colName: $colValue"
+            return
+        fi
 
-    sed -i "s/^${pk}:[^:]*/${pk}:${newValue}/" "$PWD/${tableName}.txt"
+        updateValue+=":${colValue}"
+    done
+
+
+    sed -i "s/^${pk}:.*/${updateValue}/" "$PWD/${tableName}.txt"
     echo "The table is updated successfully"
 
 }
+
 #------------------------------------Selection by id------------------------------------------
 function selectById(){
     local tableName
@@ -377,12 +388,12 @@ function selectById(){
     read -r -p "Enter the name of the table: " tableName
     validateByName "$tableName" || return
 
-    if [ -d "$tableName" ]; then
-        echo "Table Doesn't Exist"
+ if [ ! -f "$PWD/${tableName}-meta.txt" ]; then
+        echo "No Table with this name"
         return
     fi
 
-    if [ -s "${tableName}" ]; then
+    if [ ! -s "$PWD/${tableName}.txt" ]; then
         echo "The $tableName is empty."
         return
     fi
@@ -406,10 +417,10 @@ function showTablesMenu {
         echo "1. Create Table"
         echo "2. List Tables"
         echo "3. Drop Table"
-        echo "4. Insert Table"
+        echo "4. Insert Into Table"
         echo "5. select All Table"
-        echo "6. Select Table By ID"
-        echo "7. Delete Table"
+        echo "6. Select From Table By ID"
+        echo "7. Delete From Table"
         echo "8. Update Table"
         echo "9. Exit"
 
@@ -453,3 +464,4 @@ while true; do
     esac
 done
 #-----------------------------------------------------THE END-----------------------------------------------------
+
